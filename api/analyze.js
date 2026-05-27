@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-    // 设置CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -21,14 +20,13 @@ export default async function handler(req, res) {
     const API_KEY = process.env.DOUBAO_API_KEY;
 
     if (!API_KEY) {
-        console.error('DOUBAO_API_KEY is not set');
-        return res.status(500).json({ 
-            error: 'API key not configured',
-            details: 'Please set DOUBAO_API_KEY in Vercel environment variables'
-        });
+        return res.status(500).json({ error: 'API key not configured' });
     }
 
     try {
+        // 先上传图片到临时托管服务获取URL
+        const imageUrl = await uploadToTempHost(imageBase64);
+
         const prompt = `你是一位专业的摄影点评师。请对这张照片进行详细点评，包括：
 
 1. **整体评价**（1-2句话总结）
@@ -51,7 +49,7 @@ export default async function handler(req, res) {
                         {
                             type: "image_url",
                             image_url: {
-                                url: imageBase64
+                                url: imageUrl
                             }
                         },
                         {
@@ -64,8 +62,6 @@ export default async function handler(req, res) {
             max_tokens: 2048
         };
 
-        console.log('Calling Doubao API...');
-        
         const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
             method: 'POST',
             headers: {
@@ -75,21 +71,16 @@ export default async function handler(req, res) {
             body: JSON.stringify(requestBody)
         });
 
-        console.log('API response status:', response.status);
-
         if (!response.ok) {
             const errorText = await response.text();
             console.error('API error:', errorText);
             return res.status(500).json({ 
                 error: 'AI analysis failed', 
-                details: errorText,
-                status: response.status
+                details: errorText
             });
         }
 
         const data = await response.json();
-        console.log('API response received');
-        
         const review = data.choices[0].message.content;
 
         return res.status(200).json({
@@ -103,8 +94,35 @@ export default async function handler(req, res) {
         console.error('Error:', error);
         return res.status(500).json({ 
             error: 'Internal server error', 
-            message: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            message: error.message
         });
     }
+}
+
+// 上传图片到临时托管服务
+async function uploadToTempHost(base64Data) {
+    // 使用 imgbb 免费API (无需注册)
+    // 或者使用其他临时图片托管服务
+    
+    // 方案1：使用 transfer.sh (临时文件分享)
+    try {
+        const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
+        const response = await fetch('https://transfer.sh/', {
+            method: 'POST',
+            body: buffer,
+            headers: {
+                'Content-Type': 'image/jpeg'
+            }
+        });
+        
+        if (response.ok) {
+            const url = await response.text();
+            return url.trim();
+        }
+    } catch (e) {
+        console.log('transfer.sh failed, trying alternative...');
+    }
+
+    // 方案2：使用 base64 直接作为 data URL (某些API支持)
+    return base64Data;
 }
