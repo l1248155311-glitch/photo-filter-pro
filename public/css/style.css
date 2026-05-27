@@ -711,3 +711,68 @@ body {
         font-size: 0.85rem;
     }
 }
+
+/* 点评列表样式 */
+.review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.review-card {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 20px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.review-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px var(--shadow);
+}
+
+.review-card-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.review-thumbnail {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.review-meta {
+    flex: 1;
+}
+
+.review-meta h4 {
+    font-size: 1rem;
+    margin-bottom: 4px;
+    word-break: break-all;
+}
+
+.review-time {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.review-preview {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+}
+
+.modal-review {
+    overflow-y: auto;
+    max-height: calc(90vh - 100px);
+}
