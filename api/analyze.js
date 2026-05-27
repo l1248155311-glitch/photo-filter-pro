@@ -21,7 +21,11 @@ export default async function handler(req, res) {
     const API_KEY = process.env.DOUBAO_API_KEY;
 
     if (!API_KEY) {
-        return res.status(500).json({ error: 'API key not configured' });
+        console.error('DOUBAO_API_KEY is not set');
+        return res.status(500).json({ 
+            error: 'API key not configured',
+            details: 'Please set DOUBAO_API_KEY in Vercel environment variables'
+        });
     }
 
     try {
@@ -60,6 +64,8 @@ export default async function handler(req, res) {
             max_tokens: 2048
         };
 
+        console.log('Calling Doubao API...');
+        
         const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
             method: 'POST',
             headers: {
@@ -69,13 +75,21 @@ export default async function handler(req, res) {
             body: JSON.stringify(requestBody)
         });
 
+        console.log('API response status:', response.status);
+
         if (!response.ok) {
-            const errorData = await response.text();
-            console.error('API error:', errorData);
-            return res.status(500).json({ error: 'AI analysis failed', details: errorData });
+            const errorText = await response.text();
+            console.error('API error:', errorText);
+            return res.status(500).json({ 
+                error: 'AI analysis failed', 
+                details: errorText,
+                status: response.status
+            });
         }
 
         const data = await response.json();
+        console.log('API response received');
+        
         const review = data.choices[0].message.content;
 
         return res.status(200).json({
@@ -87,6 +101,10 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error('Error:', error);
-        return res.status(500).json({ error: 'Internal server error', message: error.message });
+        return res.status(500).json({ 
+            error: 'Internal server error', 
+            message: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 }
