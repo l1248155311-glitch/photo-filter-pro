@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 请用专业但易懂的语言点评，让人能学到摄影知识。`;
 
         const requestBody = {
-            model: "doubao-1.5-vision-pro-250328",
+            model: "doubao-1-5-vision-pro-32k-250115",
             messages: [
                 {
                     role: "user",
