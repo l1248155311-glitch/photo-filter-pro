@@ -1,107 +1,236 @@
-class PhotoFilterApp {
+class PhotoReviewApp {
     constructor() {
-        this.analyzer = new PhotoAnalyzer();
-        this.aiAnalyzer = new AIAnalyzer();
-        this.ui = new PhotoUI();
-        this.exporter = new PhotoExporter();
-        this.photos = [];
-        this.isAiReady = false;
+        this.uploadArea = document.getElementById('upload-area');
+        this.fileInput = document.getElementById('file-input');
+        this.progressSection = document.getElementById('progress-section');
+        this.progressFill = document.getElementById('progress-fill');
+        this.progressStatus = document.getElementById('progress-status');
+        this.resultsSection = document.getElementById('results-section');
+        this.reviewList = document.getElementById('review-list');
+        this.totalCount = document.getElementById('total-count');
+        this.modal = document.getElementById('photo-modal');
+        this.modalImg = document.getElementById('modal-img');
+        this.modalFilename = document.getElementById('modal-filename');
+        this.modalReview = document.getElementById('modal-review');
+
+        this.reviews = [];
+        this.init();
     }
 
-    async init() {
-        this.ui.init((files) => this.handleFiles(files));
-        this.initExportButtons();
+    init() {
+        this.uploadArea.addEventListener('click', () => this.fileInput.click());
+        this.fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
 
-        // 后台加载AI模型，不阻止用户操作
-        this.loadAiInBackground();
-    }
-
-    async loadAiInBackground() {
-        try {
-            this.isAiReady = await this.aiAnalyzer.loadModels((status, progress) => {
-                console.log('AI加载状态:', status);
-            });
-            console.log('AI模型加载结果:', this.isAiReady ? '成功' : '失败，使用基础模式');
-        } catch (error) {
-            console.warn('AI模型加载失败:', error);
-            this.isAiReady = false;
-        }
-    }
-
-    async handleFiles(files) {
-        this.ui.showProgress();
-
-        const total = files.length;
-        const modeText = this.isAiReady ? 'AI+像素' : '像素分析';
-        const startIndex = this.photos.length;
-
-        for (let i = 0; i < total; i++) {
-            const file = files[i];
-            this.ui.updateProgress(i, total, `[${modeText}] 分析: ${file.name} (${i + 1}/${total})`);
-
-            try {
-                let aiResult = null;
-
-                if (this.isAiReady) {
-                    try {
-                        const img = await this.loadImageForAI(file);
-                        aiResult = await this.aiAnalyzer.analyzeImage(img);
-                    } catch (aiError) {
-                        console.warn(`AI分析失败: ${file.name}`, aiError);
-                    }
-                }
-
-                const result = await this.analyzer.analyze(file, aiResult);
-                this.photos.push(result);
-            } catch (error) {
-                console.error(`分析失败: ${file.name}`, error);
-            }
-
-            // 让浏览器有时间响应
-            if (i % 5 === 0) {
-                await this.sleep(10);
-            }
-        }
-
-        this.ui.updateProgress(total, total, `分析完成！共 ${this.photos.length} 张照片`);
-        await this.sleep(300);
-
-        this.ui.hideProgress();
-        this.ui.showResults(this.photos);
-    }
-
-    loadImageForAI(file) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            const timeout = setTimeout(() => {
-                reject(new Error('图片加载超时'));
-            }, 10000);
-
-            img.onload = () => {
-                clearTimeout(timeout);
-                resolve(img);
-            };
-            img.onerror = () => {
-                clearTimeout(timeout);
-                reject(new Error('图片加载失败'));
-            };
-            img.src = URL.createObjectURL(file);
-        });
-    }
-
-    initExportButtons() {
-        document.getElementById('btn-export-photos').addEventListener('click', () => {
-            this.exporter.exportRecommendedPhotos(this.photos);
+        this.uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this.uploadArea.classList.add('dragover');
         });
 
-        document.getElementById('btn-export-report').addEventListener('click', () => {
-            this.exporter.exportReport(this.photos);
+        this.uploadArea.addEventListener('dragleave', () => {
+            this.uploadArea.classList.remove('dragover');
+        });
+
+        this.uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.uploadArea.classList.remove('dragover');
+            this.handleFiles(e.dataTransfer.files);
         });
 
         document.getElementById('btn-new-batch').addEventListener('click', () => {
-            this.photos = [];
-            this.ui.reset();
+            this.uploadArea.classList.remove('hidden');
+            this.resultsSection.classList.add('hidden');
+            this.fileInput.value = '';
         });
+
+        this.modal.querySelector('.modal-overlay').addEventListener('click', () => this.hideModal());
+        this.modal.querySelector('.modal-close').addEventListener('click', () => this.hideModal());
+    }
+
+    async handleFiles(files) {
+        const imageFiles = Array.from(files).filter(f =>
+            f.type === 'image/jpeg' || f.type === 'image/png' || f.type === 'image/webp'
+        );
+
+        if (imageFiles.length === 0) {
+            alert('请选择 JPG、PNG 或 WebP 格式的图片');
+            return;
+        }
+
+        const file = imageFiles[0];
+        await this.analyzePhoto(file);
+    }
+
+    async analyzePhoto(file) {
+        this.uploadArea.classList.add('hidden');
+        this.progressSection.classList.remove('hidden');
+        this.progressFill.style.width = '0%';
+        this.progressStatus.textContent = '正在读取照片...';
+
+        try {
+            this.progressStatus.textContent = '正在压缩图片...';
+            this.progressFill.style.width = '20%';
+            const base64 = await this.imageToBase64(file);
+
+            this.progressStatus.textContent = '正在调用AI分析，这可能需要10-30秒...';
+            this.progressFill.style.width = '50%';
+
+            // 调用API
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    imageBase64: base64,
+                    filename: file.name
+                })
+            });
+
+            this.progressFill.style.width = '90%';
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || error.error || '分析失败');
+            }
+
+            const result = await response.json();
+
+            this.progressFill.style.width = '100%';
+            this.progressStatus.textContent = '分析完成！';
+
+            await this.sleep(500);
+
+            const reviewData = {
+                id: Date.now(),
+                filename: file.name,
+                thumbnail: await this.createThumbnail(file),
+                review: result.review,
+                timestamp: new Date().toLocaleString('zh-CN')
+            };
+
+            this.reviews.unshift(reviewData);
+            this.showResults();
+
+        } catch (error) {
+            console.error('分析失败:', error);
+            alert('分析失败: ' + error.message);
+            this.progressSection.classList.add('hidden');
+            this.uploadArea.classList.remove('hidden');
+        }
+    }
+
+    imageToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const maxSize = 1024;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxSize) {
+                            height = Math.round(height * maxSize / width);
+                            width = maxSize;
+                        }
+                    } else {
+                        if (height > maxSize) {
+                            width = Math.round(width * maxSize / height);
+                            height = maxSize;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.8));
+                };
+                img.onerror = reject;
+                img.src = reader.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    createThumbnail(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const maxSize = 400;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxSize) {
+                            height = Math.round(height * maxSize / width);
+                            width = maxSize;
+                        }
+                    } else {
+                        if (height > maxSize) {
+                            width = Math.round(width * maxSize / height);
+                            height = maxSize;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.8));
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    showResults() {
+        this.progressSection.classList.add('hidden');
+        this.resultsSection.classList.remove('hidden');
+        this.totalCount.textContent = this.reviews.length;
+
+        this.reviewList.innerHTML = this.reviews.map(review => `
+            <div class="review-card" data-id="${review.id}">
+                <div class="review-card-header">
+                    <img src="${review.thumbnail}" alt="${review.filename}" class="review-thumbnail">
+                    <div class="review-meta">
+                        <h4>${review.filename}</h4>
+                        <span class="review-time">${review.timestamp}</span>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="app.viewReview(${review.id})">查看详情</button>
+                </div>
+                <div class="review-preview">${review.review.substring(0, 200)}...</div>
+            </div>
+        `).join('');
+    }
+
+    viewReview(id) {
+        const review = this.reviews.find(r => r.id === id);
+        if (!review) return;
+
+        this.modalImg.src = review.thumbnail;
+        this.modalFilename.textContent = review.filename;
+        this.modalReview.innerHTML = `
+            <div class="ai-review-box">
+                <div class="ai-review-title">🤖 AI专业点评</div>
+                ${review.review}
+            </div>
+        `;
+
+        this.modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    hideModal() {
+        this.modal.classList.add('hidden');
+        document.body.style.overflow = '';
     }
 
     sleep(ms) {
@@ -109,11 +238,4 @@ class PhotoFilterApp {
     }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        const app = new PhotoFilterApp();
-        await app.init();
-    } catch (error) {
-        console.error('应用初始化失败:', error);
-    }
-});
+const app = new PhotoReviewApp();
